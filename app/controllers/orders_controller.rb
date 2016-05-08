@@ -26,14 +26,35 @@ class OrdersController < ApplicationController
     @order.listing_id = @listing.id
     @order.buyer_id = current_user.id
     @order.seller_id = @seller.id
-    respond_to do |format|
-      if @order.save
-        format.html { redirect_to root_url, notice: 'Order was successfully created.' }
-        format.json { render :show, status: :created, location: @order }
-      else
-        format.html { render :new }
-        format.json { render json: @order.errors, status: :unprocessable_entity }
-      end
+
+    Stripe.api_key = ENV["STRIPE_API_KEY"]
+    token = params[:stripeToken]
+
+    begin
+      charge = Stripe::Charge.create(
+        :amount => (@listing.price * 100).floor,
+        :currency => "usd",
+        :card => token
+        )
+
+      transfer = Stripe::Transfer.create(
+        :amount => (@listing.price * 95).floor,
+        :currency => "usd",
+        :recipient => @seller.recipient
+        )
+
+      #flash[:notice] = "Thanks for ordering!"
+      respond_to do |format|
+        if @order.save
+          format.html { redirect_to :root, notice: 'Order was successfully created.' }
+          format.json { render action: 'show', status: :created, location: @order }
+        else
+          format.html { render :new }
+          format.json { render json: @order.errors, status: :unprocessable_entity }
+        end
+      end   
+    rescue Exception => e
+      flash[:danger] = e.message
     end
   end
 
